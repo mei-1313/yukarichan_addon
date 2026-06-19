@@ -166,6 +166,8 @@
 
   let isThinking = false;
   let autoHideTimer = null;
+  let lastUrl = null;
+  let clickCount = 0;
 
   // 閉じるボタンのイベント
   balloon.querySelector("#yukari-close").addEventListener("click", (e) => {
@@ -205,16 +207,28 @@
       mascotWrapper.classList.remove("yukari-shake");
     }, 500);
 
+    // 情報の抽出
+    const url = window.location.href;
+    const title = document.title;
+
+    // 連続クリックの判定
+    if (url === lastUrl) {
+      clickCount++;
+    } else {
+      lastUrl = url;
+      clickCount = 1;
+    }
+
     // 表情をworryにして、考え中に移行
     setEmotion("worry");
     isThinking = true;
     
-    showBalloon('お調べしております、マスター<span class="yukari-thinking">.</span><span class="yukari-thinking">.</span><span class="yukari-thinking">.</span>', true);
+    if (clickCount > 1) {
+      showBalloon('……マスター？<span class="yukari-thinking">.</span><span class="yukari-thinking">.</span><span class="yukari-thinking">.</span>', true);
+    } else {
+      showBalloon('お調べしております、マスター<span class="yukari-thinking">.</span><span class="yukari-thinking">.</span><span class="yukari-thinking">.</span>', true);
+    }
 
-    // 情報の抽出
-    const url = window.location.href;
-    const title = document.title;
-    
     // 選択テキスト、または本文の抽出
     let selectedText = window.getSelection().toString().trim();
     let content = selectedText;
@@ -238,7 +252,8 @@
       action: "poke",
       url: url,
       title: title,
-      content: content
+      content: content,
+      clickCount: clickCount
     }, (response) => {
       isThinking = false;
       if (chrome.runtime.lastError) {

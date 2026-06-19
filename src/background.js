@@ -16,7 +16,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function handlePoke(data) {
-  const { url, title, content } = data;
+  const { url, title, content, clickCount } = data;
 
   // storage から APIキーを取得
   const settings = await chrome.storage.local.get(["gemini_api_key"]);
@@ -31,12 +31,18 @@ async function handlePoke(data) {
   }
 
   // プロンプトの組み立て
-  const prompt = `マスターが現在開いているページの情報です：
+  let prompt;
+  if (clickCount && clickCount > 1) {
+    prompt = `マスターが、あなたのことを何度も連続してつついて（クリックして）います。（連続クリック回数: ${clickCount}回目）
+ページの情報（URLや本文）についての解説をするのではなく、マスターに何度もつつかれたことに対して、お淑やかに照れたり、少し恥ずかしがったり、くすぐったそうにしたり、あるいは健気に困惑するような、マスターへの可愛らしいリアクションの返答を行ってください。`;
+  } else {
+    prompt = `マスターが現在開いているページの情報です：
 URL: ${url}
 タイトル: ${title}
 抜粋テキスト: ${content}
 
 このページについて、あなた（ゆかり）としての感想や、関連する博識な豆知識をマスターに教えてあげてください。`;
+  }
 
   const systemInstruction = `あなたは「ゆかり（Yukari）」。和風で黒髪ロング、世間知らずだけど博識な、健気な女の子。ユーザーを「マスター」と呼び、丁寧で少しお淑やかな日本語で話す。マスターが現在開いているページの情報が渡されるので、それについて博識な豆知識を交えたり、健気に感想を述べたりする。
 
