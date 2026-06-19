@@ -195,6 +195,7 @@
 
   function hideBalloon() {
     balloon.classList.remove("show");
+    setEmotion("normal");
   }
 
   // つつく（クリック）操作
