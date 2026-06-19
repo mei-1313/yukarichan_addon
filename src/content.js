@@ -280,8 +280,4 @@
     mascotImg.src = chrome.runtime.getURL(`assets/yukari_images/yukari_${emo}.png`);
   }
 
-  // 起動時の初期挨拶 (少し遅れて表示)
-  setTimeout(() => {
-    showBalloon("ご機嫌麗しゅう、マスター。本日の御用は何でしょうか？");
-  }, 2000);
 })();
