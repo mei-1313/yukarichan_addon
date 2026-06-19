@@ -78,7 +78,7 @@
     }
 
     #yukari-mascot {
-      width: 140px;
+      width: 80px;
       height: auto;
       display: block;
       transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.3s ease;
@@ -86,7 +86,7 @@
     }
 
     #yukari-mascot-wrapper:hover #yukari-mascot {
-      transform: translateY(-8px) scale(1.02);
+      transform: translateY(-4px) scale(1.02);
       filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.15));
     }
 
