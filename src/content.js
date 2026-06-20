@@ -146,6 +146,53 @@
     #yukari-settings:hover {
       opacity: 1;
     }
+
+    /* チャット用スタイル */
+    #yukari-chat-container {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      border-top: 1px solid #eadacf;
+      padding-top: 8px;
+      pointer-events: auto;
+    }
+    
+    #yukari-chat-input {
+      flex: 1;
+      border: 1px solid #e2d1c3;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      background: #faf8f5;
+      color: #3e2723;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    
+    #yukari-chat-input:focus {
+      border-color: #d84315;
+    }
+    
+    #yukari-chat-send {
+      background: linear-gradient(135deg, #d84315, #f4511e);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    
+    #yukari-chat-send:hover {
+      opacity: 0.9;
+    }
+    
+    #yukari-chat-send:active {
+      transform: scale(0.95);
+    }
   `;
   document.head.appendChild(style);
 
@@ -165,6 +212,10 @@
     <div id="yukari-close">×</div>
     <div id="yukari-settings">⚙️</div>
     <div id="yukari-balloon-text">こんにちは、マスター。御用でしょうか？</div>
+    <div id="yukari-chat-container">
+      <input type="text" id="yukari-chat-input" placeholder="ゆかりちゃんに話しかける..." maxlength="140">
+      <button id="yukari-chat-send">送信</button>
+    </div>
   `;
 
   const mascotWrapper = document.createElement("div");
@@ -203,6 +254,81 @@
       e.preventDefault();
       e.stopPropagation();
       chrome.runtime.sendMessage({ action: "open_options" });
+    }
+  });
+
+  const chatInput = balloon.querySelector("#yukari-chat-input");
+  const chatSendBtn = balloon.querySelector("#yukari-chat-send");
+
+  // チャット入力欄フォーカス時に自動消去タイマーをクリアする
+  chatInput.addEventListener("focus", () => {
+    if (autoHideTimer) {
+      clearTimeout(autoHideTimer);
+      autoHideTimer = null;
+    }
+  });
+
+  // チャット送信処理
+  function sendChatMessage() {
+    const text = chatInput.value.trim();
+    if (!text || isThinking) return;
+
+    if (text.length > 140) {
+      showBalloon("マスター、入力は140文字以内でお願いいたしますね。");
+      return;
+    }
+
+    isThinking = true;
+    chatInput.disabled = true;
+    chatSendBtn.disabled = true;
+    setEmotion("worry");
+    showBalloon('考えております、マスター<span class="yukari-thinking">.</span><span class="yukari-thinking">.</span><span class="yukari-thinking">.</span>', true);
+
+    const url = window.location.href;
+    const title = document.title;
+
+    // 初回コンテキスト用に本文を抽出
+    let content = "";
+    const paragraphs = Array.from(document.querySelectorAll("p, article, main"))
+      .map(el => el.innerText.trim())
+      .filter(text => text.length > 20);
+    content = paragraphs.join("\n").substring(0, 1000);
+
+    chrome.runtime.sendMessage({
+      action: "chat",
+      text: text,
+      url: url,
+      title: title,
+      content: content
+    }, (response) => {
+      isThinking = false;
+      chatInput.disabled = false;
+      chatSendBtn.disabled = false;
+
+      if (chrome.runtime.lastError) {
+        console.error("Runtime error:", chrome.runtime.lastError);
+        setEmotion("worry");
+        showBalloon("マスター、何か調子が悪いようでございます……。(通信に失敗しました)");
+        return;
+      }
+
+      if (response && response.success) {
+        chatInput.value = "";
+        setEmotion(response.emotion);
+        showBalloon(response.text);
+      } else {
+        setEmotion(response ? response.emotion : "worry");
+        showBalloon(response ? response.text : "マスター、何か調子が悪いようでございます……。");
+      }
+    });
+  }
+
+  chatSendBtn.addEventListener("click", sendChatMessage);
+  chatInput.addEventListener("keydown", (e) => {
+    // 日本語変換確定時のEnterで送信されないよう isComposing をチェック
+    if (e.key === "Enter" && !e.isComposing) {
+      e.preventDefault();
+      sendChatMessage();
     }
   });
 

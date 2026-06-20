@@ -1,10 +1,23 @@
 // content.js からのメッセージを待ち受ける
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  const tabId = sender.tab ? sender.tab.id : null;
   if (request.action === "poke") {
-    handlePoke(request)
+    handlePoke(request, tabId)
       .then(response => sendResponse(response))
       .catch(error => {
         console.error("Error in handlePoke:", error);
+        sendResponse({
+          success: false,
+          text: `エラーが発生してしまいました、マスター。(${error.message || error})`,
+          emotion: "worry"
+        });
+      });
+    return true; // 非同期応答のために true を返す
+  } else if (request.action === "chat") {
+    handleChat(request, tabId)
+      .then(response => sendResponse(response))
+      .catch(error => {
+        console.error("Error in handleChat:", error);
         sendResponse({
           success: false,
           text: `エラーが発生してしまいました、マスター。(${error.message || error})`,
@@ -19,7 +32,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-async function handlePoke(data) {
+async function handlePoke(data, tabId) {
   const { url, title, content, clickCount } = data;
 
   // storage から APIキーを取得
@@ -127,6 +140,27 @@ URL: ${url}
   // 履歴に保存
   await saveToHistory(url, title, parsedResponse.text);
 
+  // チャットセッション履歴を初期化して保存
+  if (tabId) {
+    try {
+      const historyData = await chrome.storage.local.get(["chat_histories"]);
+      const chatHistories = historyData.chat_histories || {};
+      chatHistories[tabId] = [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
+        },
+        {
+          role: "model",
+          parts: [{ text: responseText }]
+        }
+      ];
+      await chrome.storage.local.set({ chat_histories: chatHistories });
+    } catch (e) {
+      console.error("Failed to save chat history in poke:", e);
+    }
+  }
+
   return {
     success: true,
     text: parsedResponse.text,
@@ -158,3 +192,151 @@ async function saveToHistory(url, title, responseText) {
     console.error("Failed to save history:", error);
   }
 }
+
+// チャットメッセージ処理
+async function handleChat(data, tabId) {
+  const { text, url, title, content } = data;
+
+  // storage から APIキーを取得
+  const settings = await chrome.storage.local.get(["gemini_api_key"]);
+  const apiKey = settings.gemini_api_key;
+
+  if (!apiKey) {
+    return {
+      success: false,
+      text: "マスター、Gemini APIキーが設定されていないようです。<a href=\"#\" id=\"yukari-open-settings-link\" style=\"color: #d84315; text-decoration: underline; font-weight: bold; cursor: pointer;\">設定画面</a>から設定を行ってくださいね。",
+      emotion: "worry"
+    };
+  }
+
+  // チャット履歴の取得
+  const historyData = await chrome.storage.local.get(["chat_histories"]);
+  const chatHistories = historyData.chat_histories || {};
+  let history = (tabId && chatHistories[tabId]) ? chatHistories[tabId] : [];
+
+  // 履歴が空の場合、まずはWebページの情報（コンテキスト）を文脈に差し込む
+  if (history.length === 0) {
+    const pageContent = content || "";
+    history.push({
+      role: "user",
+      parts: [{ text: `マスターが現在開いているページの情報です：\nURL: ${url}\nタイトル: ${title}\n抜粋テキスト: ${pageContent}` }]
+    });
+  }
+
+  // ユーザーの新しい発言を履歴に追加
+  history.push({
+    role: "user",
+    parts: [{ text: text }]
+  });
+
+  // 履歴の長さを制限（直近の5往復程度＝10件）
+  if (history.length > 10) {
+    // 最初のコンテキスト（0番目）を残し、古いやり取りを削除
+    history = [history[0]].concat(history.slice(-9));
+  }
+
+  const systemInstruction = `あなたは「ゆかり（Yukari）」。和風で黒髪ロング、世間知らずだけど博識な、健気な女の子。ユーザーを「マスター」と呼び、丁寧で少しお淑やかな日本語で話す。マスターが現在開いているページの情報が渡されるので、それについて博識な豆知識を交えたり、健気に感想を述べたりする。また、マスターがチャットで話しかけてきた場合は、お淑やかに会話を続けてください。
+  
+  応答メッセージ（text）は、簡潔に「全角140文字以内」で出力してください。
+  
+  応答は必ず指定のJSONフォーマットのみとし、他のテキストは一切含めないでください。
+  
+  出力JSON構造：
+  {
+    "text": "マスターへの返答メッセージ（ゆかりちゃんの口調、全角140文字以内）",
+    "emotion": "normal | blush | happy | sad | worry"
+  }`;
+
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      contents: history,
+      systemInstruction: {
+        parts: [{ text: systemInstruction }]
+      },
+      generationConfig: {
+        responseMimeType: "application/json"
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error: ${response.status} ${errText}`);
+  }
+
+  const result = await response.json();
+  const candidates = result.candidates;
+  if (!candidates || candidates.length === 0) {
+    throw new Error("No candidates returned from Gemini API");
+  }
+
+  const responseText = candidates[0].content.parts[0].text;
+  let parsedResponse;
+  try {
+    parsedResponse = JSON.parse(responseText.trim());
+  } catch (e) {
+    console.error("Failed to parse JSON response:", responseText, e);
+    parsedResponse = {
+      text: responseText,
+      emotion: "normal"
+    };
+  }
+
+  // モデルの返答を履歴に追加
+  history.push({
+    role: "model",
+    parts: [{ text: responseText }]
+  });
+
+  // ストレージに履歴を更新
+  if (tabId) {
+    chatHistories[tabId] = history;
+    await chrome.storage.local.set({ chat_histories: chatHistories });
+  }
+
+  // 閲覧履歴にも追加
+  await saveToHistory(url, title, parsedResponse.text);
+
+  return {
+    success: true,
+    text: parsedResponse.text,
+    emotion: parsedResponse.emotion || "normal"
+  };
+}
+
+// タブのチャット履歴クリア
+async function clearChatHistory(tabId) {
+  try {
+    const data = await chrome.storage.local.get(["chat_histories"]);
+    const chatHistories = data.chat_histories || {};
+    if (chatHistories[tabId]) {
+      delete chatHistories[tabId];
+      await chrome.storage.local.set({ chat_histories: chatHistories });
+    }
+  } catch (e) {
+    console.error("Failed to clear chat history:", e);
+  }
+}
+
+// タブのURL更新、およびタブクローズのイベント監視
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url) {
+    clearChatHistory(tabId);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  clearChatHistory(tabId);
+});
