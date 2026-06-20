@@ -285,6 +285,19 @@
         <div class="no-history">履歴はまだございません。</div>
       </div>
     </div>
+
+    <div class="card">
+      <h2>設定と履歴のバックアップ</h2>
+      <p style="font-size: 13px; color: var(--text-sub); margin-top: 0; margin-bottom: 20px;">
+        Firefoxの一時インストール環境などで、ブラウザ終了時にAPIキーや履歴がリセットされてしまう際にご利用ください。保存したJSONファイルを読み込むことで復元できます。
+      </p>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button id="export-btn" class="btn-secondary">バックアップを書き出す</button>
+        <button id="import-trigger-btn" class="btn-secondary">バックアップを読み込む</button>
+        <input type="file" id="import-file" accept=".json" style="display: none;">
+      </div>
+      <div id="backup-status-msg" class="status-msg"></div>
+    </div>
   </div>
   <script src="options.js"></script>
 </body>

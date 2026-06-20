@@ -4,6 +4,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const clearBtn = document.getElementById("clear-btn");
   const statusMsg = document.getElementById("status-msg");
   const historyContainer = document.getElementById("history-container");
+  const exportBtn = document.getElementById("export-btn");
+  const importTriggerBtn = document.getElementById("import-trigger-btn");
+  const importFile = document.getElementById("import-file");
+  const backupStatusMsg = document.getElementById("backup-status-msg");
 
   // 初期読み込み
   loadSettings();
@@ -29,6 +33,77 @@ document.addEventListener("DOMContentLoaded", () => {
         renderHistory([]);
       });
     }
+  });
+
+  // バックアップのエクスポート (JSON形式)
+  exportBtn.addEventListener("click", () => {
+    chrome.storage.local.get(["gemini_api_key", "visit_history"], (data) => {
+      const backupData = {
+        gemini_api_key: data.gemini_api_key || "",
+        visit_history: data.visit_history || []
+      };
+      
+      try {
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `yukari_addon_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showBackupStatus("バックアップファイルを書き出しました。", "success");
+      } catch (err) {
+        showBackupStatus("書き出しに失敗しました: " + err.message, "error");
+      }
+    });
+  });
+
+  // バックアップのインポート
+  importTriggerBtn.addEventListener("click", () => {
+    importFile.click();
+  });
+
+  importFile.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        
+        if (typeof importedData !== "object" || importedData === null) {
+          throw new Error("無効なJSONフォーマットです。");
+        }
+
+        const updates = {};
+        if (importedData.gemini_api_key !== undefined) {
+          updates.gemini_api_key = importedData.gemini_api_key;
+        }
+        if (Array.isArray(importedData.visit_history)) {
+          updates.visit_history = importedData.visit_history;
+        }
+
+        if (Object.keys(updates).length === 0) {
+          throw new Error("復元可能なデータ（APIキーまたは履歴）が見つかりません。");
+        }
+
+        chrome.storage.local.set(updates, () => {
+          showBackupStatus("バックアップから設定と履歴を復元しました。", "success");
+          loadSettings();
+          importFile.value = "";
+        });
+      } catch (err) {
+        showBackupStatus("読み込みに失敗しました: " + err.message, "error");
+        importFile.value = "";
+      }
+    };
+    reader.readAsText(file);
   });
 
   function loadSettings() {
@@ -77,6 +152,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setTimeout(() => {
       statusMsg.style.opacity = 0;
+    }, 3000);
+  }
+
+  function showBackupStatus(message, type) {
+    backupStatusMsg.textContent = message;
+    backupStatusMsg.className = `status-msg ${type}`;
+    backupStatusMsg.style.opacity = 1;
+
+    setTimeout(() => {
+      backupStatusMsg.style.opacity = 0;
     }, 3000);
   }
 
