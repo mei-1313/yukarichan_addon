@@ -12,6 +12,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
       });
     return true; // 非同期応答のために true を返す
+  } else if (request.action === "open_options") {
+    chrome.runtime.openOptionsPage();
+    sendResponse({ success: true });
+    return false;
   }
 });
 
@@ -25,7 +29,7 @@ async function handlePoke(data) {
   if (!apiKey) {
     return {
       success: false,
-      text: "マスター、Gemini APIキーが設定されていないようです。拡張機能のオプション画面から設定を行ってくださいね。",
+      text: "マスター、Gemini APIキーが設定されていないようです。<a href=\"#\" id=\"yukari-open-settings-link\" style=\"color: #d84315; text-decoration: underline; font-weight: bold; cursor: pointer;\">設定画面</a>から設定を行ってくださいね。",
       emotion: "worry"
     };
   }

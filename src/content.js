@@ -131,6 +131,21 @@
     #yukari-close:hover {
       opacity: 1;
     }
+
+    /* 設定ボタン */
+    #yukari-settings {
+      position: absolute;
+      top: 4px;
+      right: 20px;
+      font-size: 10px;
+      color: #8d6e63;
+      cursor: pointer;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+    #yukari-settings:hover {
+      opacity: 1;
+    }
   `;
   document.head.appendChild(style);
 
@@ -148,6 +163,7 @@
   balloon.id = "yukari-balloon";
   balloon.innerHTML = `
     <div id="yukari-close">×</div>
+    <div id="yukari-settings">⚙️</div>
     <div id="yukari-balloon-text">こんにちは、マスター。御用でしょうか？</div>
   `;
 
@@ -175,9 +191,24 @@
     hideBalloon();
   });
 
+  // 設定ボタンのイベント
+  balloon.querySelector("#yukari-settings").addEventListener("click", (e) => {
+    e.stopPropagation();
+    chrome.runtime.sendMessage({ action: "open_options" });
+  });
+
+  // 設定リンクのクリックイベント（デリゲーション）
+  balloon.addEventListener("click", (e) => {
+    if (e.target && e.target.id === "yukari-open-settings-link") {
+      e.preventDefault();
+      e.stopPropagation();
+      chrome.runtime.sendMessage({ action: "open_options" });
+    }
+  });
+
   function showBalloon(text, html = false) {
     const textEl = document.getElementById("yukari-balloon-text");
-    if (html) {
+    if (html || text.includes("<a ") || text.includes("<span ")) {
       textEl.innerHTML = text;
     } else {
       textEl.textContent = text;
